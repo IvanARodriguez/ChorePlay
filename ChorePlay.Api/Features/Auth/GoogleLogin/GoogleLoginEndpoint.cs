@@ -37,11 +37,12 @@ public static class GoogleLoginEndpoints
       return Results.Challenge(properties, ["Google"]);
     });
 
-    endpoints.MapGet("/api/auth/google/callback", async (
+    _ = endpoints.MapGet("/api/auth/google/callback", static async (
       [FromQuery] string redirectUrl,
       HttpContext context,
       IMediator mediator,
-      CookieManager cookieManager
+      CookieManager cookieManager,
+      ILogger<Program> logger
     ) =>
     {
       var result = await context.AuthenticateAsync(IdentityConstants.ExternalScheme);
@@ -49,12 +50,17 @@ public static class GoogleLoginEndpoints
       {
         return Results.Unauthorized();
       }
-
+      foreach (var claim in result.Principal.Claims)
+      {
+        logger.LogInformation("Claim: {Type} = {Value}", claim.Type, claim.Value);
+      }
       var payload = new GoogleJsonWebSignature.Payload
       {
         Email = result.Principal.FindFirstValue(ClaimTypes.Email),
         Name = result.Principal.FindFirstValue(ClaimTypes.Name),
-        Picture = result.Principal.FindFirstValue("picture")
+        Picture = result.Principal.FindFirstValue("picture"),
+        GivenName = result.Principal.FindFirstValue(ClaimTypes.GivenName),
+        FamilyName = result.Principal.FindFirstValue(ClaimTypes.Surname)
       };
 
       var response = await mediator.Send(

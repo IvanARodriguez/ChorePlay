@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
-namespace ChorePlay.Api.Data;
+namespace ChorePlay.Api.Infrastructure.Data;
 
 public class AppDbContext : IdentityDbContext<AppUser, AppRole, Ulid>
 {

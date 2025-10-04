@@ -1,12 +1,9 @@
 using System.Text;
 using ChorePlay.Api.Infrastructure.Data;
-using ChorePlay.Api.Shared.Abstractions;
 using ChorePlay.Api.Shared.Auth;
 using ChorePlay.Api.Shared.Configuration;
 using ChorePlay.Api.Shared.Jwt;
 using ChorePlay.Api.Shared.Security;
-using ChorePlay.Api.Infrastructure.Repository;
-using Mediator;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -15,42 +12,30 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace ChorePlay.Api.Infrastructure.Extensions;
 
-public static class ServiceCollectionExtensions
+/// <summary>
+/// Extension methods for configuring infrastructure services (Database, Identity, Authentication).
+/// </summary>
+public static class InfrastructureExtensions
 {
-  public static IServiceCollection ConfigureGoogleAuth(
+  /// <summary>
+  /// Adds all infrastructure services including Database, Identity, Authentication, and Cookies.
+  /// </summary>
+  public static IServiceCollection AddInfrastructure(
       this IServiceCollection services,
       IConfiguration configuration)
   {
-    services.Configure<GoogleAuthSettings>(options =>
-    {
-      options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? string.Empty;
-      options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? string.Empty;
-    });
+    services.AddDatabase(configuration);
+    services.AddIdentityServices();
+    services.AddAuthenticationServices(configuration);
+    services.AddCookieServices();
 
     return services;
   }
 
-  public static IServiceCollection ConfigureJwtAuthentication(
-      this IServiceCollection services,
-      IConfiguration configuration)
-  {
-    services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
-    services.AddSingleton(sp =>
-        sp.GetRequiredService<IOptions<JwtSettings>>().Value);
-    services.AddScoped<IJwtService, JwtService>();
-
-    return services;
-  }
-
-  public static IServiceCollection ConfigureCookies(this IServiceCollection services)
-  {
-    services.AddHttpContextAccessor();
-    services.AddScoped<CookieManager>();
-
-    return services;
-  }
-
-  public static IServiceCollection ConfigureDatabase(
+  /// <summary>
+  /// Configures the database context with PostgreSQL.
+  /// </summary>
+  private static IServiceCollection AddDatabase(
       this IServiceCollection services,
       IConfiguration configuration)
   {
@@ -60,16 +45,24 @@ public static class ServiceCollectionExtensions
     return services;
   }
 
-  public static IServiceCollection ConfigureIdentity(this IServiceCollection services)
+  /// <summary>
+  /// Configures ASP.NET Core Identity with custom settings.
+  /// </summary>
+  private static IServiceCollection AddIdentityServices(this IServiceCollection services)
   {
     services.AddIdentity<AppUser, AppRole>(options =>
     {
+      // Password requirements
       options.Password.RequireDigit = true;
       options.Password.RequireLowercase = true;
       options.Password.RequireNonAlphanumeric = true;
       options.Password.RequireUppercase = true;
-      options.User.RequireUniqueEmail = true;
       options.Password.RequiredLength = 8;
+
+      // User requirements
+      options.User.RequireUniqueEmail = true;
+
+      // Sign-in requirements
       options.SignIn.RequireConfirmedAccount = true;
     })
     .AddEntityFrameworkStores<AppDbContext>()
@@ -78,10 +71,27 @@ public static class ServiceCollectionExtensions
     return services;
   }
 
-  public static IServiceCollection ConfigureAuthentication(
+  /// <summary>
+  /// Configures authentication services including JWT and Google OAuth.
+  /// </summary>
+  private static IServiceCollection AddAuthenticationServices(
       this IServiceCollection services,
       IConfiguration configuration)
   {
+    // JWT Configuration
+    services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
+    services.AddSingleton(sp =>
+        sp.GetRequiredService<IOptions<JwtSettings>>().Value);
+    services.AddScoped<IJwtService, JwtService>();
+
+    // Google OAuth Configuration
+    services.Configure<GoogleAuthSettings>(options =>
+    {
+      options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? string.Empty;
+      options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? string.Empty;
+    });
+
+    // Authentication schemes
     services.AddAuthentication()
         .AddGoogle(googleOptions =>
         {
@@ -115,34 +125,27 @@ public static class ServiceCollectionExtensions
           };
         });
 
+    // Cookie configuration
     services.ConfigureApplicationCookie(options =>
     {
       options.ExpireTimeSpan = TimeSpan.FromDays(7);
       options.SlidingExpiration = true;
-      options.Cookie.SameSite = SameSiteMode.None;
-      options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+      options.Cookie.SameSite = SameSiteMode.None; // Important for cross-site redirect flow
+      options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Use HTTPS when possible
     });
 
-    return services;
-  }
-
-  public static IServiceCollection ConfigureAuthorizationServices(this IServiceCollection services)
-  {
     services.AddAuthorization();
+
     return services;
   }
 
-  public static IServiceCollection ConfigureRepositories(this IServiceCollection services)
+  /// <summary>
+  /// Configures cookie-related services.
+  /// </summary>
+  private static IServiceCollection AddCookieServices(this IServiceCollection services)
   {
-    services.AddScoped<IUserRepository, UserRepository>();
-    // Add more repositories here as needed
-    return services;
-  }
-
-  public static IServiceCollection ConfigureMediator(this IServiceCollection services)
-  {
-    services.AddMediator(options =>
-        options.ServiceLifetime = ServiceLifetime.Scoped);
+    services.AddHttpContextAccessor();
+    services.AddScoped<CookieManager>();
 
     return services;
   }

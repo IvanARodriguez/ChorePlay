@@ -21,6 +21,7 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
             AvatarUrl = user.AvatarUrl,
             FirstName = user.FirstName,
             EmailConfirmed = true,
+            LastName = user.LastName
         };
         var result = await _userManager.CreateAsync(appUser);
 

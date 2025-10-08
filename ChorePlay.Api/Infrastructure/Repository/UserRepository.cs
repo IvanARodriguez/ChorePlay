@@ -11,9 +11,31 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
 {
 
     private readonly UserManager<AppUser> _userManager = userManager;
-    public async Task<User> CreateWithGoogleAsync(User user, CancellationToken ct)
+    public async Task<User> UpsertAsync(User user, CancellationToken ct)
     {
-        AppUser appUser = new()
+        var existingUser = await _userManager.FindByEmailAsync(user.Email);
+
+        if (existingUser is not null)
+        {
+            // Update basic info (you can extend this as needed)
+            existingUser.FirstName = user.FirstName;
+            existingUser.LastName = user.LastName;
+            existingUser.AvatarUrl = user.AvatarUrl;
+
+            var updateResult = await _userManager.UpdateAsync(existingUser);
+            if (!updateResult.Succeeded)
+            {
+                throw new ExternalLoginProviderException(
+                    "Google",
+                    $"Unable to update user: {string.Join(", ", updateResult.Errors.Select(e => e.Description))}"
+                );
+            }
+
+            return existingUser.ToUserDomain();
+        }
+
+        // If new user — create
+        var newUser = new AppUser
         {
             Id = user.Id,
             Email = user.Email,
@@ -23,14 +45,17 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
             EmailConfirmed = true,
             LastName = user.LastName
         };
-        var result = await _userManager.CreateAsync(appUser);
 
-        if (!result.Succeeded)
-            throw new ExternalLoginProviderException("Google",
-                $"Unable to create user: {string.Join(", ",
-                    result.Errors.Select(x => x.Description))}");
+        var createResult = await _userManager.CreateAsync(newUser);
+        if (!createResult.Succeeded)
+        {
+            throw new ExternalLoginProviderException(
+                "Google",
+                $"Unable to create user: {string.Join(", ", createResult.Errors.Select(e => e.Description))}"
+            );
+        }
 
-        return appUser.ToUserDomain();
+        return newUser.ToUserDomain();
     }
 
     public async Task<User?> FindByEmailAsync(string email, CancellationToken ct)

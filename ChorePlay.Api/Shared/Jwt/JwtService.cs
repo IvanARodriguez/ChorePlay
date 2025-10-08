@@ -2,48 +2,60 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using ChorePlay.Api.Shared.Domain;
 using Microsoft.IdentityModel.Tokens;
 
 namespace ChorePlay.Api.Shared.Jwt;
 
-public class RefreshToken
-{
-  public string Token { get; init; } = string.Empty;
-  public DateTime Expires { get; init; }
-  public DateTime Created { get; init; }
-}
-
-public class JwtService(JwtSettings settings) : IJwtService
+public class JwtService(JwtSettings settings, IHttpContextAccessor httpContextAccessor) : IJwtService
 {
   private readonly JwtSettings _settings = settings;
+  private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
 
-  public string CreateJwtAccessToken(Ulid userId, string email, IEnumerable<string>? roles = null)
+  public void WriteAuthTokenAsHttpOnlyCookie(string cookieName, string token, DateTime expiration)
   {
-    var claims = new List<Claim>
-        {
-            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new(ClaimTypes.NameIdentifier, userId.ToString()),
-            new(JwtRegisteredClaimNames.Email, email)
-        };
-
-    if (roles != null)
+    _httpContextAccessor.HttpContext?.Response.Cookies.Append(cookieName, token, new CookieOptions
     {
-      claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
-    }
+      HttpOnly = true,
+      Expires = expiration,
+      IsEssential = true,
+      Secure = true,
+      SameSite = SameSiteMode.Strict
+    });
+  }
 
-    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
-    var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+  public (string jwtToken, DateTime expiresAtUtc) GenerateJwtToken(User user)
+  {
+    var signingKey = new SymmetricSecurityKey(
+        Encoding.UTF8.GetBytes(_settings.Secret)
+    );
+    var credentials = new SigningCredentials(
+      signingKey,
+      SecurityAlgorithms.HmacSha256);
+
+    var claims = new[]
+    {
+      new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+      new Claim(JwtRegisteredClaimNames.Sid, Ulid.NewUlid().ToString()),
+      new Claim(JwtRegisteredClaimNames.Email, user.Email),
+      new Claim(JwtRegisteredClaimNames.Name, user.FirstName ?? ""),
+      new Claim(JwtRegisteredClaimNames.FamilyName, user.LastName ?? ""),
+      new Claim(ClaimTypes.NameIdentifier, user.ToString())
+    };
+
+    var expires = DateTime.UtcNow.AddMinutes(_settings.AccessTokenExpiresInMinutes);
 
     var token = new JwtSecurityToken(
-        issuer: _settings.Issuer,
-        audience: _settings.Audience,
-        claims: claims,
-        expires: DateTime.UtcNow.AddMinutes(_settings.AccessTokenExpiresInMinutes),
-        signingCredentials: creds
+      issuer: _settings.Issuer,
+      audience: _settings.Audience,
+      claims: claims,
+      expires: expires,
+      signingCredentials: credentials
     );
 
-    return new JwtSecurityTokenHandler().WriteToken(token);
+    var jwtToken = new JwtSecurityTokenHandler().WriteToken(token);
+
+    return (jwtToken, expires);
   }
 
   public string GenerateRefreshToken()

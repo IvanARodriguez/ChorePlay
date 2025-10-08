@@ -5,6 +5,7 @@ using ChorePlay.Api.Shared.Configuration;
 using ChorePlay.Api.Shared.Jwt;
 using ChorePlay.Api.Shared.Security;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -17,9 +18,6 @@ namespace ChorePlay.Api.Infrastructure.Extensions;
 /// </summary>
 public static class InfrastructureExtensions
 {
-  /// <summary>
-  /// Adds all infrastructure services including Database, Identity, Authentication, and Cookies.
-  /// </summary>
   public static IServiceCollection AddInfrastructure(
       this IServiceCollection services,
       IConfiguration configuration)
@@ -32,9 +30,6 @@ public static class InfrastructureExtensions
     return services;
   }
 
-  /// <summary>
-  /// Configures the database context with PostgreSQL.
-  /// </summary>
   private static IServiceCollection AddDatabase(
       this IServiceCollection services,
       IConfiguration configuration)
@@ -45,9 +40,6 @@ public static class InfrastructureExtensions
     return services;
   }
 
-  /// <summary>
-  /// Configures ASP.NET Core Identity with custom settings.
-  /// </summary>
   private static IServiceCollection AddIdentityServices(this IServiceCollection services)
   {
     services.AddIdentity<AppUser, AppRole>(options =>
@@ -71,17 +63,16 @@ public static class InfrastructureExtensions
     return services;
   }
 
-  /// <summary>
-  /// Configures authentication services including JWT and Google OAuth.
-  /// </summary>
   private static IServiceCollection AddAuthenticationServices(
       this IServiceCollection services,
       IConfiguration configuration)
   {
     // JWT Configuration
     services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
+
     services.AddSingleton(sp =>
         sp.GetRequiredService<IOptions<JwtSettings>>().Value);
+
     services.AddScoped<IJwtService, JwtService>();
 
     // Google OAuth Configuration
@@ -91,8 +82,12 @@ public static class InfrastructureExtensions
       options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? string.Empty;
     });
 
-    // Authentication schemes
-    services.AddAuthentication()
+    services.AddAuthentication(opt =>
+    {
+      opt.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+      opt.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+      opt.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    })
         .AddGoogle(googleOptions =>
         {
           var clientId = configuration["Authentication:Google:ClientId"];
@@ -109,10 +104,19 @@ public static class InfrastructureExtensions
           googleOptions.ClaimActions.MapJsonKey("urn:google:profile", "link");
           googleOptions.ClaimActions.MapJsonKey("picture", "picture");
         })
-        .AddJwtBearer(options =>
+        .AddCookie(options =>
         {
           var jwtSettings = configuration.GetSection("Jwt").Get<JwtSettings>()!;
-          options.TokenValidationParameters = new TokenValidationParameters
+          options.Cookie.Name = "auth_token";
+          options.Cookie.HttpOnly = true;
+          options.Cookie.SameSite = SameSiteMode.Strict;
+          options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+          options.SlidingExpiration = true;
+        })
+        .AddJwtBearer(opt =>
+        {
+          var jwtSettings = configuration.GetSection("Jwt").Get<JwtSettings>()!;
+          opt.TokenValidationParameters = new()
           {
             ValidateIssuer = true,
             ValidateAudience = true,
@@ -120,12 +124,18 @@ public static class InfrastructureExtensions
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtSettings.Issuer,
             ValidAudience = jwtSettings.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                      Encoding.UTF8.GetBytes(jwtSettings.Secret))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret))
+          };
+          opt.Events = new()
+          {
+            OnMessageReceived = context =>
+            {
+              context.Token = context.Request.Cookies["ACCESS_TOKEN"];
+              return Task.CompletedTask;
+            }
           };
         });
 
-    // Cookie configuration
     services.ConfigureApplicationCookie(options =>
     {
       options.ExpireTimeSpan = TimeSpan.FromDays(7);
@@ -139,9 +149,6 @@ public static class InfrastructureExtensions
     return services;
   }
 
-  /// <summary>
-  /// Configures cookie-related services.
-  /// </summary>
   private static IServiceCollection AddCookieServices(this IServiceCollection services)
   {
     services.AddHttpContextAccessor();

@@ -1,7 +1,6 @@
-using ChorePlay.Api.Shared.Auth;
 using ChorePlay.Api.Shared.Domain;
 
-namespace ChorePlay.Api.Shared.Mappings;
+namespace ChorePlay.Api.Shared.Auth;
 
 public static class IdentityExtensions
 {
@@ -13,8 +12,29 @@ public static class IdentityExtensions
         Id: appUser.Id,
         Email: appUser.Email ?? string.Empty,
         FirstName: appUser.FirstName ?? string.Empty,
-        AvatarUrl: appUser.AvatarUrl,
-        LastName: appUser.LastName
-    );
+        LastName: appUser.LastName ?? string.Empty,
+        AvatarUrl: appUser.AvatarUrl
+    )
+    {
+      EmailConfirmed = appUser.EmailConfirmed,
+      OAuthEmailConfirmed = appUser.OAuthEmailConfirmed
+    };
+  }
+
+  public static AppUser ToAppUserDomain(this User user)
+  {
+    ArgumentNullException.ThrowIfNull(user);
+
+    return new AppUser
+    {
+      Id = user.Id,
+      Email = user.Email ?? string.Empty,
+      FirstName = user.FirstName ?? string.Empty,
+      LastName = user.LastName ?? string.Empty,
+      AvatarUrl = user.AvatarUrl,
+      EmailConfirmed = user.EmailConfirmed,
+      OAuthEmailConfirmed = user.OAuthEmailConfirmed
+    };
   }
 }
+

@@ -18,6 +18,7 @@ namespace ChorePlay.Api.Infrastructure.Extensions;
 /// </summary>
 public static class InfrastructureExtensions
 {
+
   public static IServiceCollection AddInfrastructure(
       this IServiceCollection services,
       IConfiguration configuration)
@@ -50,6 +51,9 @@ public static class InfrastructureExtensions
       options.Password.RequireNonAlphanumeric = true;
       options.Password.RequireUppercase = true;
       options.Password.RequiredLength = 8;
+
+      options.Lockout.MaxFailedAccessAttempts = 5;
+      options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
 
       // User requirements
       options.User.RequireUniqueEmail = true;

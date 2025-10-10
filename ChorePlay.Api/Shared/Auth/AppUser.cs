@@ -16,4 +16,5 @@ public class AppUser : IdentityUser<Ulid>
   // Refresh token management
   public string? RefreshToken { get; set; }
   public DateTime? RefreshTokenExpirationDate { get; set; }
+  public bool OAuthEmailConfirmed { get; set; }
 }

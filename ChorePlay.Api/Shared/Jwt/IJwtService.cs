@@ -5,8 +5,9 @@ namespace ChorePlay.Api.Shared.Jwt;
 
 public interface IJwtService
 {
-  public (string jwtToken, DateTime expiresAtUtc) GenerateJwtToken(User user);
-  string GenerateRefreshToken();
+  (string accessToken, DateTime expiresAtUtc) GenerateJwtToken(User user);
+  (string refreshToken, DateTime expiresAtUtc) GenerateRefreshToken();
   ClaimsPrincipal? GetPrincipalFromExpiredToken(string Token);
   void WriteAuthTokenAsHttpOnlyCookie(string cookieName, string token, DateTime expiration);
+  string HashToken(string token);
 }

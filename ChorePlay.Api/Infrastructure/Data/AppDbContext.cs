@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ChorePlay.Api.Infrastructure.Data;
 
-public class AppDbContext : IdentityDbContext<AppUser, AppRole, Ulid>
+public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbContext<AppUser, AppRole, Ulid>(options)
 {
-  public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-
   protected override void OnModelCreating(ModelBuilder builder)
   {
     base.OnModelCreating(builder);

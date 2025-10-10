@@ -9,7 +9,6 @@ namespace ChorePlay.Api.Shared.Jwt;
 
 public class JwtService(JwtSettings settings, IHttpContextAccessor httpContextAccessor) : IJwtService
 {
-  private readonly JwtSettings _settings = settings;
   private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
 
   public void WriteAuthTokenAsHttpOnlyCookie(string cookieName, string token, DateTime expiration)
@@ -24,10 +23,10 @@ public class JwtService(JwtSettings settings, IHttpContextAccessor httpContextAc
     });
   }
 
-  public (string jwtToken, DateTime expiresAtUtc) GenerateJwtToken(User user)
+  public (string accessToken, DateTime expiresAtUtc) GenerateJwtToken(User user)
   {
     var signingKey = new SymmetricSecurityKey(
-        Encoding.UTF8.GetBytes(_settings.Secret)
+        Encoding.UTF8.GetBytes(settings.Secret)
     );
     var credentials = new SigningCredentials(
       signingKey,
@@ -43,11 +42,11 @@ public class JwtService(JwtSettings settings, IHttpContextAccessor httpContextAc
       new Claim(ClaimTypes.NameIdentifier, user.ToString())
     };
 
-    var expires = DateTime.UtcNow.AddMinutes(_settings.AccessTokenExpiresInMinutes);
+    var expires = DateTime.UtcNow.AddMinutes(settings.AccessTokenExpiresInMinutes);
 
     var token = new JwtSecurityToken(
-      issuer: _settings.Issuer,
-      audience: _settings.Audience,
+      issuer: settings.Issuer,
+      audience: settings.Audience,
       claims: claims,
       expires: expires,
       signingCredentials: credentials
@@ -58,13 +57,24 @@ public class JwtService(JwtSettings settings, IHttpContextAccessor httpContextAc
     return (jwtToken, expires);
   }
 
-  public string GenerateRefreshToken()
+  public (string refreshToken, DateTime expiresAtUtc) GenerateRefreshToken()
   {
     var randomNumber = new byte[64];
     using var rng = RandomNumberGenerator.Create();
     rng.GetBytes(randomNumber);
+    var expiration = DateTime.UtcNow.AddDays(settings.RefreshTokenExpiresInDays);
 
-    return Convert.ToBase64String(randomNumber);
+    return (
+      refreshToken: Convert.ToBase64String(randomNumber),
+      expiresAtUtc: expiration);
+  }
+
+  public string HashToken(string token)
+  {
+    using var sha256 = SHA256.Create();
+    var tokenBytes = Encoding.UTF8.GetBytes(token);
+    var hashBytes = sha256.ComputeHash(tokenBytes);
+    return Convert.ToBase64String(hashBytes);
   }
 
   public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
@@ -74,10 +84,10 @@ public class JwtService(JwtSettings settings, IHttpContextAccessor httpContextAc
       ValidateAudience = true,
       ValidateIssuer = true,
       ValidateIssuerSigningKey = true,
-      IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret)),
-      ValidateLifetime = false, // ⚡ allow expired token
-      ValidIssuer = _settings.Issuer,
-      ValidAudience = _settings.Audience
+      IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.Secret)),
+      ValidateLifetime = false,
+      ValidIssuer = settings.Issuer,
+      ValidAudience = settings.Audience
     };
 
     var tokenHandler = new JwtSecurityTokenHandler();

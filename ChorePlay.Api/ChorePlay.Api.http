@@ -6,5 +6,16 @@ GET {{ChorePlay_Api_HostAddress}}/api/auth/google/login?redirectUrl=/dashboard
 ###
 GET {{ChorePlay_Api_HostAddress}}/
 Accept: application/json
+###
+POST {{ChorePlay_Api_HostAddress}}/api/auth/register
+Accept: application/json
+Content-Type: application/json
+
+{
+  "firstName": "",
+  "lastName": "",
+  "email": "",
+  "password": ""
+}
 
 ###

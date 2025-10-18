@@ -8,7 +8,6 @@ namespace ChorePlay.Api.Infrastructure.Repository;
 
 public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
 {
-
     private readonly UserManager<AppUser> _userManager = userManager;
 
     public async Task<User> UpsertAsync(User user, CancellationToken ct)
@@ -19,9 +18,6 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
 
         if (existingUser is not null)
         {
-            // Mark OAuth confirmation explicitly — do not trust caller
-            existingUser.OAuthEmailConfirmed = true;
-
             // Only update fields we trust from OAuth provider — prevent attacker data injection
             existingUser.FirstName = user.FirstName ?? existingUser.FirstName;
             existingUser.LastName = user.LastName ?? existingUser.LastName;
@@ -29,7 +25,9 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
 
             var updateResult = await _userManager.UpdateAsync(existingUser);
             if (!updateResult.Succeeded)
-                throw new BadRequestException(FormatIdentityErrors("Unable to update OAuth user", updateResult));
+                throw new BadRequestException(
+                    FormatIdentityErrors("Unable to update OAuth user", updateResult)
+                );
 
             return (await _userManager.FindByEmailAsync(user.Email))!.ToUserDomain();
         }
@@ -63,11 +61,17 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
         return foundUser?.ToUserDomain();
     }
 
-    public async Task SaveRefreshTokenAsync(Ulid userId, string refreshToken, DateTime expiration, CancellationToken ct)
+    public async Task SaveRefreshTokenAsync(
+        Ulid userId,
+        string refreshToken,
+        DateTime expiration,
+        CancellationToken ct
+    )
     {
         ct.ThrowIfCancellationRequested();
 
-        var appUser = await _userManager.FindByIdAsync(userId.ToString())
+        var appUser =
+            await _userManager.FindByIdAsync(userId.ToString())
             ?? throw new NotFoundException($"User with ID '{userId}' was not found.");
 
         appUser.RefreshToken = refreshToken;
@@ -84,22 +88,45 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
     }
 
     /// <remarks>
-    /// This method requires that the token is hashed before validation.  
+    /// This method requires that the token is hashed before validation.
     /// Use <see cref="IJwtService.HashToken(string)"/> to obtain the correct hashed value.
     /// </remarks>
-    public async Task<bool> ValidateRefreshTokenAsync(Ulid userId, string hashedToken, CancellationToken ct)
+    public async Task<bool> ValidateRefreshTokenAsync(
+        Ulid userId,
+        string hashedToken,
+        CancellationToken ct
+    )
     {
         var user = await _userManager.FindByIdAsync(userId.ToString());
-        if (user == null || user.RefreshToken == null) return false;
-        return user.RefreshToken == hashedToken &&
-               user.RefreshTokenExpirationDate.HasValue &&
-               user.RefreshTokenExpirationDate.Value > DateTime.UtcNow;
+        if (user == null || user.RefreshToken == null)
+            return false;
+        return user.RefreshToken == hashedToken
+            && user.RefreshTokenExpirationDate.HasValue
+            && user.RefreshTokenExpirationDate.Value > DateTime.UtcNow;
+    }
+
+    public async Task<User> UpdateAsync(User user, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var existingUser =
+            await _userManager.FindByIdAsync(user.Id.ToString())
+            ?? throw new NotFoundException("User not found");
+
+        await UpdateExistingUserAsync(existingUser, user, ct);
+        return existingUser.ToUserDomain();
     }
 
     // ---------- Private Helpers ----------
 
-    private async Task UpdateExistingUserAsync(AppUser existingUser, User user, CancellationToken ct)
+    private async Task UpdateExistingUserAsync(
+        AppUser existingUser,
+        User user,
+        CancellationToken ct
+    )
     {
+        ct.ThrowIfCancellationRequested();
+
         UpdateBasicFields(existingUser, user);
 
         if (!string.IsNullOrWhiteSpace(user.PlainPassword) && existingUser.PasswordHash is null)
@@ -107,12 +134,17 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
             var result = await _userManager.AddPasswordAsync(existingUser, user.PlainPassword);
 
             if (!result.Succeeded)
-                throw new BadRequestException(FormatIdentityErrors("Failed to set password", result));
+                throw new BadRequestException(
+                    FormatIdentityErrors("Failed to set password", result)
+                );
         }
 
         var updateResult = await _userManager.UpdateAsync(existingUser);
+
         if (!updateResult.Succeeded)
-            throw new BusinessRuleViolationException(FormatIdentityErrors("Unable to update user", updateResult));
+            throw new BusinessRuleViolationException(
+                FormatIdentityErrors("Unable to update user", updateResult)
+            );
     }
 
     private static void UpdateBasicFields(AppUser target, User source)
@@ -126,16 +158,12 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
     {
         var newUser = user.ToAppUserDomain();
 
-        // For OAuth users:
-        // EmailConfirmed = false → regular confirmation process not used
-        // OAuthEmailConfirmed = true → means email verified by OAuth provider
-        newUser.OAuthEmailConfirmed = true;
-        newUser.EmailConfirmed = false;
-
         var result = await _userManager.CreateAsync(newUser);
 
         if (!result.Succeeded)
-            throw new BadRequestException(FormatIdentityErrors("Unable to create OAuth user", result));
+            throw new BadRequestException(
+                FormatIdentityErrors("Unable to create OAuth user", result)
+            );
 
         return newUser;
     }
@@ -163,23 +191,22 @@ public class UserRepository(UserManager<AppUser> userManager) : IUserRepository
         if (string.IsNullOrWhiteSpace(user.PlainPassword))
             throw new BadRequestException("A password is required to register this user.");
 
-        existingUser.EmailConfirmed = false;
         var result = await _userManager.AddPasswordAsync(existingUser, user.PlainPassword);
         if (!result.Succeeded)
             throw new BadRequestException(FormatIdentityErrors("Failed to set password", result));
     }
 
-    private static string FormatIdentityErrors(string message, IdentityResult result)
-        => $"{message}: {string.Join(", ", result.Errors.Select(e => e.Description))}";
+    private static string FormatIdentityErrors(string message, IdentityResult result) =>
+        $"{message}: {string.Join(", ", result.Errors.Select(e => e.Description))}";
 
     public async Task<bool> PasswordIsValid(User user, string password, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
         var appUser = await _userManager.FindByEmailAsync(user.Email);
-        if (appUser is null) return false;
+        if (appUser is null)
+            return false;
 
         return await _userManager.CheckPasswordAsync(appUser, password);
     }
-
 }

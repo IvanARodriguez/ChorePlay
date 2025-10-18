@@ -15,15 +15,14 @@ namespace ChorePlay.Api.Migrations
                 table: "AspNetUsers",
                 type: "boolean",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "OAuthEmailConfirmed",
-                table: "AspNetUsers");
+            migrationBuilder.DropColumn(name: "OAuthEmailConfirmed", table: "AspNetUsers");
         }
     }
 }

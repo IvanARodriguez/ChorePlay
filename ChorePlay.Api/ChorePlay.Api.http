@@ -19,3 +19,14 @@ Content-Type: application/json
 }
 
 ###
+
+POST {{ChorePlay_Api_HostAddress}}/api/auth/login
+Accept: application/json
+Content-Type: application/application/json
+
+{
+ "email": "",
+ "password": "" 
+}
+
+###

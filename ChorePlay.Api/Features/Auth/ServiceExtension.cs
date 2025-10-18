@@ -1,5 +1,5 @@
-using ChorePlay.Api.Shared.Abstractions;
 using ChorePlay.Api.Infrastructure.Repository;
+using ChorePlay.Api.Shared.Abstractions;
 using ChorePlay.Api.Shared.Domain.Services;
 
 namespace ChorePlay.Api.Features.Auth;
